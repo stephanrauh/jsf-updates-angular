@@ -1,3 +1,10 @@
+if (typeof(jsf)=='undefined') {
+    if (typeof(PrimeFaces)=='undefined')
+        alert("JUA requires JSF.");
+    else
+        alert("JUA is not compatible to PrimeFaces yet.");
+}
+
 /* global jsf: true, angular: true, jQuery: true */
 (function (window, angular, jsf, document, $) {
 	"use strict";
@@ -57,7 +64,7 @@
 		$.each(updates, function(index, update) {
 			var id = escapeJSFClientId(update.id);
 
-			if (!id.contains("ViewState")) {
+			if (!(id.indexOf("ViewState")>=0)) {
 				$(id).find(".ng-scope, .ng-isolate-scope").each(function(index, scopedChildElement) {
 					if (window.jua.debug) {
 						console.log("destroying child scope for element", scopedChildElement);
@@ -70,14 +77,15 @@
 	}
 
 	function handleAjaxUpdates(data) {
-		window.setTimeout(function () {
-			var $compile = angular.element(document).injector().get('$compile'),
-				updates = data.responseXML.getElementsByTagName('update');
+    	window.setTimeout(function () {
+            var theInjector = angular.element(document.querySelector('[ng-controller]')).injector();
+            var $compile = theInjector.get('$compile');
+            var updates = data.responseXML.getElementsByTagName('update');
 
 			$.each(updates, function(index, update) {
 				var id = escapeJSFClientId(update.id), element;
 
-				if (!id.contains("ViewState")) {
+				 if (!(id.indexOf("ViewState")>=0)) {
 					element = angular.element($(id));
 
 					if (element) {
