@@ -1,12 +1,16 @@
 if (typeof(jsf)=='undefined') {
     if (typeof(PrimeFaces)=='undefined')
         alert("JUA requires JSF.");
-    else
-        alert("JUA is not compatible to PrimeFaces yet.");
+    else {
+        activateJUA(window, angular, null, PrimeFaces, document, jQuery);
+    }
+}
+else {
+    activateJUA(window, angular, jsf, null, document, jQuery);
 }
 
 /* global jsf: true, angular: true, jQuery: true */
-(function (window, angular, jsf, document, $) {
+function activateJUA(window, angular, jsf, primefaces, document, $) {
 	"use strict";
 
 	var onCompleteCallbacks = [],
@@ -59,6 +63,8 @@ if (typeof(jsf)=='undefined') {
 	}
 
 	function destroyScopes(data) {
+        var controllerElement=angular.element(document.querySelector('[ng-controller]'));
+        var theInjector = controllerElement.injector();
 		var updates = data.responseXML.getElementsByTagName('update');
 
 		$.each(updates, function(index, update) {
@@ -74,11 +80,11 @@ if (typeof(jsf)=='undefined') {
 				});
 			}
 		});
+		return theInjector;
 	}
 
-	function handleAjaxUpdates(data) {
+	function handleAjaxUpdates(data, theInjector) {
     	window.setTimeout(function () {
-            var theInjector = angular.element(document.querySelector('[ng-controller]')).injector();
             var $compile = theInjector.get('$compile');
             var updates = data.responseXML.getElementsByTagName('update');
 
@@ -93,7 +99,11 @@ if (typeof(jsf)=='undefined') {
 							console.log("compiling angular element", element);
 						}
 
-						$compile(element)(element.scope());
+                        var myScope=element.scope();
+                        if (typeof(myScope)=='undefined')
+                            alert("JUA requests must not update the ng-controller!");
+                        else 
+                            $compile(element)(myScope);
 					}
 				}
 			});
@@ -107,20 +117,44 @@ if (typeof(jsf)=='undefined') {
 		});
 	}
 
-	jsf.ajax.addOnEvent(function (data) {
-		if (data.status === 'begin') {
-			requestOngoing = true;
-			onCompleteCallbacks = [];
-		}
-		if (data.status === 'complete') {
-			destroyScopes(data);
-		}
-		if (data.status === 'success') {
-			handleAjaxUpdates(data);
-			requestOngoing = false;
-		}
-	});
-
+    if (null != jsf) {
+        jsf.ajax.addOnEvent(function (data) {
+            if (data.status === 'begin') {
+                requestOngoing = true;
+                onCompleteCallbacks = [];
+            }
+            if (data.status === 'complete') {
+            }
+            if (data.status === 'success') {
+                // todo: handleAjaxUpdates() should be called in the 'complete' branch - find a way to pass the injector around
+                var theInjector=destroyScopes(data.responseXML);
+                handleAjaxUpdates(data.responseXML, theInjector);
+                requestOngoing = false;
+            }
+        });
+    }
+    else if (null != primefaces) {
+        var originalPrimeFacesAjaxUtilsSend = primefaces.ajax.Request.send;
+        primefaces.ajax.Request.send = function(cfg) {
+            requestOngoing = true;
+            onCompleteCallbacks = [];
+            var theInjector=null;
+            if (!cfg.onsuccess) {
+               cfg.onsuccess = function(data, status, xhr) {
+                   theInjector=destroyScopes(data);     
+               }
+            }
+            if (!cfg.oncomplete) {
+               cfg.oncomplete = function(xhr, status) {
+                   handleAjaxUpdates(xhr.responseXML, theInjector);
+                   requestOngoing = false;
+                   return true;
+               }
+            }
+            originalPrimeFacesAjaxUtilsSend.apply(this, arguments);
+        };
+    }
+    
 	window.jua = {
 		onComplete: onComplete,
 		onCompleteEvent: onCompleteEvent,
@@ -129,4 +163,4 @@ if (typeof(jsf)=='undefined') {
 			return requestOngoing;
 		}
 	};
-})(window, angular, jsf, document, jQuery);
+}
